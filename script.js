@@ -1168,32 +1168,65 @@ function createPartialSphereCoverage(innerDiameter, outerDiameter, color, covera
     // coverage = (1 - cos(theta)) / 2, solve for theta
     const cutoffAngle = Math.acos(1 - 2 * coverage);
     
-    // Create materials with higher opacity and more vibrant appearance
+    // Create materials with same appearance as sparse mode
     const layerMaterial = new THREE.MeshPhongMaterial({
         color: color,
         transparent: true,
-        opacity: 0.85, // Increased opacity
-        shininess: 60, // Increased shininess
+        opacity: 0.7,
+        shininess: 30,
         side: THREE.DoubleSide
     });
     
-    // Use a more distinct cap shape with a direct sphere geometry
-    const capGeometry = new THREE.SphereGeometry(outerRadius, 32, 32, 0, Math.PI * 2, 0, cutoffAngle);
+    // Calculate the thickness of the layer
+    const thickness = outerRadius - innerRadius;
+    
+    // Create a more visible cap by using a thicker shell approach
+    const capGeometry = new THREE.SphereGeometry(
+        outerRadius, 
+        32, 32, 
+        0, Math.PI * 2, 
+        0, cutoffAngle
+    );
+    
+    // Create the cap with the same material as sparse patches
     const cap = new THREE.Mesh(capGeometry, layerMaterial);
     nanoparticle.add(cap);
     
-    // Add edge highlight to make the cap boundary more visible
+    // Add small sphere patches around the edge to make it more obvious
+    const edgePoints = 12; // Number of points around the edge
+    for (let i = 0; i < edgePoints; i++) {
+        const angle = (i / edgePoints) * Math.PI * 2;
+        const x = Math.sin(angle) * outerRadius * Math.sin(cutoffAngle);
+        const z = Math.cos(angle) * outerRadius * Math.sin(cutoffAngle);
+        const y = outerRadius * Math.cos(cutoffAngle);
+        
+        // Create a small sphere at each point on the edge
+        const patchGeometry = new THREE.SphereGeometry(thickness * 0.8, 8, 8);
+        const patch = new THREE.Mesh(patchGeometry, layerMaterial);
+        patch.position.set(x, y, z);
+        nanoparticle.add(patch);
+    }
+    
+    // Create a brighter color for the edge highlight
+    const highlightColor = new THREE.Color(color);
+    // Brighten by increasing RGB components
+    highlightColor.r = Math.min(1, highlightColor.r * 1.4);
+    highlightColor.g = Math.min(1, highlightColor.g * 1.4);
+    highlightColor.b = Math.min(1, highlightColor.b * 1.4);
+    
+    // Add a more visible ring at the edge of the cap
     const edgeGeometry = new THREE.TorusGeometry(
         outerRadius * Math.sin(cutoffAngle), // radius
-        outerRadius * 0.02, // tube radius (thicker to be more visible)
-        16, // radial segments
-        32 // tubular segments
+        thickness * 0.4, // tube radius - proportional to layer thickness
+        12, // radial segments
+        24 // tubular segments
     );
     
-    const edgeMaterial = new THREE.MeshBasicMaterial({
-        color: 0xFFFFFF,
+    const edgeMaterial = new THREE.MeshPhongMaterial({
+        color: highlightColor,
         transparent: true,
-        opacity: 0.7
+        opacity: 0.8,
+        shininess: 40
     });
     
     const edge = new THREE.Mesh(edgeGeometry, edgeMaterial);
@@ -1207,49 +1240,24 @@ function createPartialSphereCoverage(innerDiameter, outerDiameter, color, covera
         bottomCap.rotation.x = Math.PI;
         nanoparticle.add(bottomCap);
         
-        // Edge highlight for bottom cap
+        // Add patches around the bottom edge as well
+        for (let i = 0; i < edgePoints; i++) {
+            const angle = (i / edgePoints) * Math.PI * 2;
+            const x = Math.sin(angle) * outerRadius * Math.sin(cutoffAngle);
+            const z = Math.cos(angle) * outerRadius * Math.sin(cutoffAngle);
+            const y = -outerRadius * Math.cos(cutoffAngle);
+            
+            const patchGeometry = new THREE.SphereGeometry(thickness * 0.8, 8, 8);
+            const patch = new THREE.Mesh(patchGeometry, layerMaterial);
+            patch.position.set(x, y, z);
+            nanoparticle.add(patch);
+        }
+        
+        // Bottom edge ring
         const bottomEdge = new THREE.Mesh(edgeGeometry.clone(), edgeMaterial.clone());
         bottomEdge.rotation.x = Math.PI / 2;
         bottomEdge.position.y = -outerRadius * Math.cos(cutoffAngle);
         nanoparticle.add(bottomEdge);
-    }
-    
-    // Add indicator of cap thickness
-    // This creates a visible ring at the inside edge of the cap to show the layer thickness
-    const innerEdgeGeometry = new THREE.TorusGeometry(
-        innerRadius * Math.sin(cutoffAngle), // inner radius
-        innerRadius * 0.02, // tube radius
-        16, // radial segments
-        32 // tubular segments
-    );
-    
-    // Create a darker version of the layer color
-    const colorObj = new THREE.Color(color);
-    // Darken the color manually by multiplying RGB components
-    const darkerColor = new THREE.Color(
-        colorObj.r * 0.7,
-        colorObj.g * 0.7,
-        colorObj.b * 0.7
-    );
-    
-    const innerEdgeMaterial = new THREE.MeshBasicMaterial({
-        color: darkerColor,
-        transparent: true,
-        opacity: 0.8
-    });
-    
-    // Top inner edge
-    const topInnerEdge = new THREE.Mesh(innerEdgeGeometry, innerEdgeMaterial);
-    topInnerEdge.rotation.x = Math.PI / 2;
-    topInnerEdge.position.y = innerRadius * Math.cos(cutoffAngle);
-    nanoparticle.add(topInnerEdge);
-    
-    // Bottom inner edge if coverage > 50%
-    if (coverage > 0.5) {
-        const bottomInnerEdge = new THREE.Mesh(innerEdgeGeometry.clone(), innerEdgeMaterial.clone());
-        bottomInnerEdge.rotation.x = Math.PI / 2;
-        bottomInnerEdge.position.y = -innerRadius * Math.cos(cutoffAngle);
-        nanoparticle.add(bottomInnerEdge);
     }
 }
 
