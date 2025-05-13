@@ -1194,6 +1194,11 @@ function animate() {
         controls.update();
     }
     
+    if (nanoparticle) {
+        nanoparticle.rotation.x += 0.005;
+        nanoparticle.rotation.y += 0.005;
+    }
+    
     renderer.render(scene, camera);
 }
 
@@ -1446,8 +1451,86 @@ function exportData() {
         }
     };
     
-    // Convert to JSON string
-    const jsonString = JSON.stringify(exportData, null, 2);
+    // Create modal for export options
+    const exportModal = document.createElement('div');
+    exportModal.className = 'modal open';
+    exportModal.id = 'exportModal';
+    
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    
+    const modalHeader = document.createElement('div');
+    modalHeader.className = 'modal-header';
+    modalHeader.innerHTML = `
+        <h3>Export Options</h3>
+        <span class="close">&times;</span>
+    `;
+    
+    const modalBody = document.createElement('div');
+    modalBody.className = 'modal-body';
+    modalBody.innerHTML = `
+        <p>Choose export format:</p>
+        <div class="export-options">
+            <button class="btn btn-secondary export-btn" data-format="json">
+                <i class="fas fa-file-code"></i> JSON
+            </button>
+            <button class="btn btn-secondary export-btn" data-format="csv">
+                <i class="fas fa-file-csv"></i> CSV
+            </button>
+            <button class="btn btn-secondary export-btn" data-format="png">
+                <i class="fas fa-file-image"></i> Image (PNG)
+            </button>
+        </div>
+    `;
+    
+    const modalFooter = document.createElement('div');
+    modalFooter.className = 'modal-footer';
+    modalFooter.innerHTML = `
+        <button id="cancelExportBtn" class="btn btn-secondary">Cancel</button>
+    `;
+    
+    modalContent.appendChild(modalHeader);
+    modalContent.appendChild(modalBody);
+    modalContent.appendChild(modalFooter);
+    exportModal.appendChild(modalContent);
+    
+    document.body.appendChild(exportModal);
+    
+    // Add event listeners
+    const closeBtn = exportModal.querySelector('.close');
+    const cancelBtn = exportModal.querySelector('#cancelExportBtn');
+    const exportBtns = exportModal.querySelectorAll('.export-btn');
+    
+    closeBtn.addEventListener('click', closeExportModal);
+    cancelBtn.addEventListener('click', closeExportModal);
+    
+    exportBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const format = this.getAttribute('data-format');
+            
+            switch(format) {
+                case 'json':
+                    downloadJSON(exportData);
+                    break;
+                case 'csv':
+                    downloadCSV(exportData);
+                    break;
+                case 'png':
+                    downloadScreenshot();
+                    break;
+            }
+            
+            closeExportModal();
+        });
+    });
+    
+    function closeExportModal() {
+        document.body.removeChild(exportModal);
+    }
+}
+
+function downloadJSON(data) {
+    const jsonString = JSON.stringify(data, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     
     // Create download link
@@ -1456,6 +1539,68 @@ function exportData() {
     downloadLink.download = `nanoparticle-design-${new Date().toISOString().split('T')[0]}.json`;
     
     // Trigger download
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+}
+
+function downloadCSV(data) {
+    // Flatten the data structure for CSV
+    const flatData = {
+        'Core Material': data.design.core.material,
+        'Core Size (nm)': data.design.core.size,
+        'Core Shape': data.design.core.shape,
+        'Environment Medium': data.design.environment.medium,
+        'Environment pH': data.design.environment.ph,
+        'Environment Temperature (°C)': data.design.environment.temperature,
+        'Zeta Potential (mV)': data.properties.zetaPotential.toFixed(1),
+        'Hydrodynamic Diameter (nm)': data.properties.hydrodynamicDiameter.toFixed(1),
+        'Aggregation Potential': data.properties.aggregationPotential.description
+    };
+    
+    // Add layer data
+    data.design.layers.forEach((layer, index) => {
+        flatData[`Layer ${index+1} Type`] = layer.type;
+        flatData[`Layer ${index+1} Material`] = layer.material;
+        flatData[`Layer ${index+1} Thickness (nm)`] = layer.thickness;
+        flatData[`Layer ${index+1} Coverage (%)`] = layer.coverage;
+    });
+    
+    // Convert to CSV
+    const header = Object.keys(flatData).join(',');
+    const values = Object.values(flatData).join(',');
+    const csvContent = `${header}\n${values}`;
+    
+    // Create download
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const downloadLink = document.createElement('a');
+    downloadLink.href = URL.createObjectURL(blob);
+    downloadLink.download = `nanoparticle-design-${new Date().toISOString().split('T')[0]}.csv`;
+    
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+}
+
+function downloadScreenshot() {
+    // Make sure we're on the 3D view tab
+    document.querySelector('.tab[data-tab="view-3d"]').click();
+    
+    // Temporarily pause rotation for screenshot
+    const wasRotating = nanoparticle ? true : false;
+    
+    // Render scene
+    renderer.render(scene, camera);
+    
+    // Get canvas data
+    const canvas = document.getElementById('nanoparticleCanvas');
+    const imageURL = canvas.toDataURL('image/png');
+    
+    // Create download
+    const downloadLink = document.createElement('a');
+    downloadLink.href = imageURL;
+    downloadLink.download = `nanoparticle-design-${new Date().toISOString().split('T')[0]}.png`;
+    
     document.body.appendChild(downloadLink);
     downloadLink.click();
     document.body.removeChild(downloadLink);
