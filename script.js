@@ -1251,33 +1251,28 @@ function autoScaleView() {
     const center = boundingBox.getCenter(new THREE.Vector3());
     const size = boundingBox.getSize(new THREE.Vector3());
     
-    // Set camera position based on size
+    // Get the maximum dimension of the particle
     const maxDim = Math.max(size.x, size.y, size.z);
     
-    // Use much larger scale factors for all sizes to ensure particles fit on screen
-    let scaleFactor;
+    // Base distance that ensures the smallest particle (5nm) is clearly visible
+    const baseDistance = 200;
     
-    // Determine scale factor based on particle size
-    if (currentDesign.core.size > 900) {
-        scaleFactor = 18; // Very large particles
-    } else if (currentDesign.core.size > 700) {
-        scaleFactor = 15; // Large particles
-    } else if (currentDesign.core.size > 500) {
-        scaleFactor = 12; // Medium-large particles
-    } else if (currentDesign.core.size > 200) {
-        scaleFactor = 10; // Medium particles
-    } else {
-        scaleFactor = 8;  // Default for smaller particles
-    }
+    // Calculate camera position based on actual particle size relative to max possible size (1000nm)
+    // This ensures a 1000nm particle appears 10x larger than a 100nm particle
+    // while still keeping both fully in view
+    const maxPossibleSize = 1000;
+    const relativeSizeRatio = currentDesign.core.size / maxPossibleSize;
+    
+    // Scale factor is inversely proportional to particle size
+    // Smaller particles need higher scale factors to be visible
+    const scaleFactor = 10 / (0.5 + relativeSizeRatio * 0.5);
     
     // Apply the scale factor to position the camera
     camera.position.z = maxDim * scaleFactor;
     
-    // For very large particles, increase the camera's far clipping plane
-    if (currentDesign.core.size > 500) {
-        camera.far = 20000;
-        camera.updateProjectionMatrix();
-    }
+    // Ensure camera can see very large particles
+    camera.far = Math.max(10000, camera.position.z * 5);
+    camera.updateProjectionMatrix();
     
     // Update controls
     if (controls) {
