@@ -16,6 +16,7 @@ let currentDesign = {
         temperature: 25
     }
 };
+let controls; // For orbit controls
 
 // Material properties database
 const materialProperties = {
@@ -536,6 +537,16 @@ function setupEventListeners() {
     document.getElementById('coreSize').addEventListener('change', updateCoreProperties);
     document.getElementById('coreShape').addEventListener('change', updateCoreProperties);
     
+    // Input box for size
+    document.getElementById('coreSizeInput').addEventListener('input', function() {
+        const value = this.value;
+        if (value >= 5 && value <= 200) {
+            document.getElementById('coreSize').value = value;
+            updateSizeDisplay();
+            updateCoreProperties();
+        }
+    });
+    
     // Environment controls
     document.getElementById('medium').addEventListener('change', updateEnvironmentProperties);
     document.getElementById('ph').addEventListener('input', updatePhDisplay);
@@ -543,10 +554,59 @@ function setupEventListeners() {
     document.getElementById('temperature').addEventListener('input', updateTemperatureDisplay);
     document.getElementById('temperature').addEventListener('change', updateEnvironmentProperties);
     
+    // Input box for pH
+    document.getElementById('phInput').addEventListener('input', function() {
+        const value = this.value;
+        if (value >= 3 && value <= 10) {
+            document.getElementById('ph').value = value;
+            updatePhDisplay();
+            updateEnvironmentProperties();
+        }
+    });
+    
+    // Input box for temperature
+    document.getElementById('temperatureInput').addEventListener('input', function() {
+        const value = this.value;
+        if (value >= 20 && value <= 40) {
+            document.getElementById('temperature').value = value;
+            updateTemperatureDisplay();
+            updateEnvironmentProperties();
+        }
+    });
+    
     // Layer handling
     document.getElementById('addLayerBtn').addEventListener('click', openAddLayerModal);
     document.getElementById('cancelLayerBtn').addEventListener('click', closeAddLayerModal);
     document.getElementById('addLayerSubmitBtn').addEventListener('click', addNewLayer);
+    
+    // Navigation buttons
+    const navLinks = document.querySelectorAll('.nav-links a');
+    navLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = this.textContent.toLowerCase();
+            
+            if (target === 'designer') {
+                // We're already here, no action needed
+            } else if (target === 'library') {
+                window.location.href = 'library.html';
+            } else if (target === 'documentation') {
+                window.location.href = 'documentation.html';
+            } else if (target === 'about') {
+                window.location.href = 'about.html';
+            }
+        });
+    });
+    
+    // Home/landing page button
+    const logoElement = document.querySelector('.logo');
+    logoElement.addEventListener('click', function() {
+        window.location.href = 'https://scicanvas.ai';
+    });
+    
+    // Action buttons
+    document.querySelector('.action-buttons .btn-secondary').addEventListener('click', saveDesign);
+    document.querySelector('.action-buttons .btn-primary').addEventListener('click', exportData);
     
     // Tab switching
     const tabs = document.querySelectorAll('.tab');
@@ -596,16 +656,19 @@ function setupEventListeners() {
 function updateSizeDisplay() {
     const sizeValue = document.getElementById('coreSize').value;
     document.getElementById('coreSizeValue').textContent = `${sizeValue} nm`;
+    document.getElementById('coreSizeInput').value = sizeValue;
 }
 
 function updatePhDisplay() {
     const phValue = document.getElementById('ph').value;
     document.getElementById('phValue').textContent = phValue;
+    document.getElementById('phInput').value = phValue;
 }
 
 function updateTemperatureDisplay() {
     const tempValue = document.getElementById('temperature').value;
     document.getElementById('temperatureValue').textContent = `${tempValue}°C`;
+    document.getElementById('temperatureInput').value = tempValue;
 }
 
 function updateCoreProperties() {
@@ -828,6 +891,17 @@ function initThreeJS() {
         document.getElementById('nanoparticleCanvas').clientHeight
     );
     
+    // Add orbit controls
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.25;
+    controls.screenSpacePanning = false;
+    controls.maxDistance = 500;
+    controls.minDistance = 50;
+    
+    // Add zoom buttons
+    addZoomControls();
+    
     // Add lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
@@ -844,6 +918,46 @@ function initThreeJS() {
     
     // Handle window resize
     window.addEventListener('resize', onWindowResize);
+}
+
+function addZoomControls() {
+    // Create zoom controls container
+    const zoomControls = document.createElement('div');
+    zoomControls.className = 'zoom-controls';
+    
+    // Zoom in button
+    const zoomInBtn = document.createElement('button');
+    zoomInBtn.className = 'zoom-btn zoom-in';
+    zoomInBtn.innerHTML = '<i class="fas fa-plus"></i>';
+    zoomInBtn.addEventListener('click', () => {
+        camera.position.z *= 0.8;
+    });
+    
+    // Zoom out button
+    const zoomOutBtn = document.createElement('button');
+    zoomOutBtn.className = 'zoom-btn zoom-out';
+    zoomOutBtn.innerHTML = '<i class="fas fa-minus"></i>';
+    zoomOutBtn.addEventListener('click', () => {
+        camera.position.z *= 1.2;
+    });
+    
+    // Reset view button
+    const resetViewBtn = document.createElement('button');
+    resetViewBtn.className = 'zoom-btn reset-view';
+    resetViewBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+    resetViewBtn.addEventListener('click', () => {
+        camera.position.set(0, 0, 200);
+        controls.reset();
+    });
+    
+    // Add buttons to container
+    zoomControls.appendChild(zoomInBtn);
+    zoomControls.appendChild(zoomOutBtn);
+    zoomControls.appendChild(resetViewBtn);
+    
+    // Add container to canvas container
+    const canvasContainer = document.querySelector('.canvas-container');
+    canvasContainer.appendChild(zoomControls);
 }
 
 function createNanoparticle() {
@@ -877,30 +991,152 @@ function createNanoparticle() {
     currentDesign.layers.forEach((layer, index) => {
         const layerThickness = layer.thickness;
         const newDiameter = currentDiameter + (layerThickness * 2);
+        const coverage = layer.coverage / 100; // Convert percentage to decimal
         
-        const layerGeometry = createGeometryByShape(
-            currentDesign.core.shape,
-            newDiameter
-        );
-        
-        const layerColor = getLayerPropertyByType(layer.type, layer.material, 'color');
-        
-        const layerMaterial = new THREE.MeshPhongMaterial({
-            color: layerColor,
-            transparent: true,
-            opacity: 0.7,
-            shininess: 30,
-            wireframe: false
-        });
-        
-        const layerMesh = new THREE.Mesh(layerGeometry, layerMaterial);
-        nanoparticle.add(layerMesh);
+        if (coverage >= 0.95) {
+            // If coverage is near complete, show as a full layer
+            const layerGeometry = createGeometryByShape(
+                currentDesign.core.shape,
+                newDiameter
+            );
+            
+            const layerColor = getLayerPropertyByType(layer.type, layer.material, 'color');
+            
+            const layerMaterial = new THREE.MeshPhongMaterial({
+                color: layerColor,
+                transparent: true,
+                opacity: 0.7,
+                shininess: 30,
+                wireframe: false
+            });
+            
+            const layerMesh = new THREE.Mesh(layerGeometry, layerMaterial);
+            nanoparticle.add(layerMesh);
+        } else {
+            // For partial coverage, create partial geometries
+            createPartialCoverage(
+                currentDesign.core.shape,
+                currentDiameter,
+                newDiameter,
+                getLayerPropertyByType(layer.type, layer.material, 'color'),
+                coverage
+            );
+        }
         
         currentDiameter = newDiameter;
     });
     
     // Add nanoparticle to scene
     scene.add(nanoparticle);
+    
+    // Center the camera view on the nanoparticle
+    autoScaleView();
+}
+
+function createPartialCoverage(shape, innerDiameter, outerDiameter, color, coverage) {
+    // Different strategies based on shape
+    if (shape === 'sphere') {
+        createPartialSphereCoverage(innerDiameter, outerDiameter, color, coverage);
+    } else {
+        // For non-spherical shapes, use patch-based approach
+        createPatchBasedCoverage(shape, innerDiameter, outerDiameter, color, coverage);
+    }
+}
+
+function createPartialSphereCoverage(innerDiameter, outerDiameter, color, coverage) {
+    // For spheres, we'll use a latitude-based cutoff to represent coverage percentage
+    const innerRadius = innerDiameter / 2;
+    const outerRadius = outerDiameter / 2;
+    
+    // Calculate the cutoff angle based on coverage
+    // coverage = (1 - cos(theta)) / 2, solve for theta
+    const cutoffAngle = Math.acos(1 - 2 * coverage);
+    
+    // Create a spherical shell with holes
+    const segments = 32;
+    
+    // Create points for the partial sphere
+    const points = [];
+    for (let i = 0; i <= segments; i++) {
+        const theta = (i / segments) * cutoffAngle;
+        const y = Math.cos(theta);
+        const radius = Math.sin(theta);
+        points.push(new THREE.Vector2(radius, y));
+    }
+    
+    // Create a lathe geometry that will generate a partial sphere
+    const latheGeometry = new THREE.LatheGeometry(points, 32);
+    latheGeometry.scale(outerRadius, outerRadius, outerRadius);
+    
+    // Create a hole for the inner sphere
+    const innerPoints = [];
+    for (let i = 0; i <= segments; i++) {
+        const theta = (i / segments) * cutoffAngle;
+        const y = Math.cos(theta);
+        const radius = Math.sin(theta);
+        innerPoints.push(new THREE.Vector2(radius, y));
+    }
+    
+    const innerLatheGeometry = new THREE.LatheGeometry(innerPoints, 32);
+    innerLatheGeometry.scale(innerRadius, innerRadius, innerRadius);
+    
+    // Create materials
+    const layerMaterial = new THREE.MeshPhongMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.7,
+        shininess: 30,
+        side: THREE.DoubleSide
+    });
+    
+    // Create upper hemisphere
+    const upperHemisphere = new THREE.Mesh(latheGeometry, layerMaterial);
+    nanoparticle.add(upperHemisphere);
+    
+    // Mirror for lower hemisphere if needed
+    if (coverage > 0.5) {
+        const lowerHemisphere = upperHemisphere.clone();
+        lowerHemisphere.rotation.x = Math.PI;
+        nanoparticle.add(lowerHemisphere);
+    }
+}
+
+function createPatchBasedCoverage(shape, innerDiameter, outerDiameter, color, coverage) {
+    // For non-spherical shapes, create patches of material on the surface
+    const layerMaterial = new THREE.MeshPhongMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.7,
+        shininess: 30
+    });
+    
+    // Number of patches based on coverage
+    const maxPatches = 50;
+    const numPatches = Math.floor(maxPatches * coverage);
+    
+    // Get the outer geometry shape for reference points
+    const referenceGeometry = createGeometryByShape(shape, outerDiameter);
+    const positions = referenceGeometry.attributes.position.array;
+    
+    // Place patches randomly on surface
+    for (let i = 0; i < numPatches; i++) {
+        // Get a random vertex from the reference geometry
+        const vertexIndex = Math.floor(Math.random() * (positions.length / 3)) * 3;
+        const x = positions[vertexIndex];
+        const y = positions[vertexIndex + 1];
+        const z = positions[vertexIndex + 2];
+        
+        // Create a small sphere as a patch
+        const patchSize = (outerDiameter - innerDiameter) * 0.8;
+        const patchGeometry = new THREE.SphereGeometry(patchSize, 8, 8);
+        const patch = new THREE.Mesh(patchGeometry, layerMaterial);
+        
+        // Position the patch
+        patch.position.set(x, y, z);
+        
+        // Add to nanoparticle
+        nanoparticle.add(patch);
+    }
 }
 
 function createGeometryByShape(shape, size) {
@@ -934,21 +1170,28 @@ function updateNanoparticleModel() {
     createNanoparticle();
 }
 
-function onWindowResize() {
-    const canvasContainer = document.getElementById('nanoparticleCanvas');
+function autoScaleView() {
+    // Calculate bounding box of the nanoparticle
+    const boundingBox = new THREE.Box3().setFromObject(nanoparticle);
+    const center = boundingBox.getCenter(new THREE.Vector3());
+    const size = boundingBox.getSize(new THREE.Vector3());
     
-    camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
-    camera.updateProjectionMatrix();
+    // Set camera position based on size
+    const maxDim = Math.max(size.x, size.y, size.z);
+    camera.position.z = maxDim * 4;
     
-    renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+    // Update controls
+    if (controls) {
+        controls.target.copy(center);
+        controls.update();
+    }
 }
 
 function animate() {
     requestAnimationFrame(animate);
     
-    if (nanoparticle) {
-        nanoparticle.rotation.x += 0.005;
-        nanoparticle.rotation.y += 0.005;
+    if (controls) {
+        controls.update();
     }
     
     renderer.render(scene, camera);
@@ -1171,4 +1414,58 @@ function generateRecommendations(design) {
     }
     
     return recommendations.join(" ");
+}
+
+// Functions for action buttons
+function saveDesign() {
+    // Create a design object to save
+    const designToSave = JSON.parse(JSON.stringify(currentDesign));
+    
+    // Add timestamp and name
+    designToSave.timestamp = new Date().toISOString();
+    designToSave.name = prompt("Enter a name for this design:", "My Nanoparticle Design");
+    
+    if (!designToSave.name) return; // User cancelled
+    
+    // Save to localStorage
+    let savedDesigns = JSON.parse(localStorage.getItem('nanoforgeDesigns') || '[]');
+    savedDesigns.push(designToSave);
+    localStorage.setItem('nanoforgeDesigns', JSON.stringify(savedDesigns));
+    
+    alert("Design saved successfully!");
+}
+
+function exportData() {
+    // Create export data with current design and calculated properties
+    const exportData = {
+        design: JSON.parse(JSON.stringify(currentDesign)),
+        properties: {
+            zetaPotential: calculateZetaPotential(currentDesign),
+            hydrodynamicDiameter: calculateHydrodynamicDiameter(currentDesign),
+            aggregationPotential: calculateAggregationPotential(currentDesign)
+        }
+    };
+    
+    // Convert to JSON string
+    const jsonString = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    
+    // Create download link
+    const downloadLink = document.createElement('a');
+    downloadLink.href = URL.createObjectURL(blob);
+    downloadLink.download = `nanoparticle-design-${new Date().toISOString().split('T')[0]}.json`;
+    
+    // Trigger download
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+}
+
+function onWindowResize() {
+    const canvasContainer = document.getElementById('nanoparticleCanvas');
+    
+    camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+    camera.updateProjectionMatrix();
+    
+    renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
 }

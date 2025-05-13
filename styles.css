@@ -199,10 +199,42 @@ main {
     flex-grow: 1;
     background-color: white;
     border-radius: var(--radius);
-    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05);
     overflow: hidden;
     position: relative;
-    min-height: 400px;
+}
+
+.zoom-controls {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    z-index: 10;
+}
+
+.zoom-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: white;
+    border: 1px solid var(--gray-300);
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.zoom-btn:hover {
+    background-color: var(--gray-100);
+    transform: scale(1.05);
+}
+
+.zoom-btn i {
+    color: var(--primary);
+    font-size: 1rem;
 }
 
 #nanoparticleCanvas {
@@ -473,16 +505,37 @@ main {
 }
 
 .slider-container {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.slider-wrapper {
     display: flex;
     align-items: center;
     gap: 1rem;
+    margin-bottom: 0.5rem;
+    width: 100%;
+}
+
+.slider-wrapper {
+    flex: 1;
+    position: relative;
+}
+
+.input-container {
+    display: flex;
+    align-items: center;
+    width: 90px;
+}
+
+.numeric-input {
+    width: 60px;
+    padding: 0.5rem;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    text-align: right;
+}
+
+.unit {
+    margin-left: 4px;
+    color: var(--gray-600);
+    font-size: 0.9rem;
 }
 
 .slider {

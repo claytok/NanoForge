@@ -51,6 +51,10 @@
                                     <input type="range" id="coreSize" class="slider" min="5" max="200" value="50">
                                     <span id="coreSizeValue" class="slider-value">50 nm</span>
                                 </div>
+                                <div class="input-container">
+                                    <input type="number" id="coreSizeInput" class="numeric-input" min="5" max="200" value="50">
+                                    <span class="unit">nm</span>
+                                </div>
                             </div>
                         </div>
                         <div class="form-group">
@@ -96,6 +100,9 @@
                                     <input type="range" id="ph" class="slider" min="3" max="10" step="0.1" value="7.4">
                                     <span id="phValue" class="slider-value">7.4</span>
                                 </div>
+                                <div class="input-container">
+                                    <input type="number" id="phInput" class="numeric-input" min="3" max="10" step="0.1" value="7.4">
+                                </div>
                             </div>
                         </div>
                         <div class="form-group">
@@ -104,6 +111,10 @@
                                 <div class="slider-wrapper">
                                     <input type="range" id="temperature" class="slider" min="20" max="40" value="25">
                                     <span id="temperatureValue" class="slider-value">25°C</span>
+                                </div>
+                                <div class="input-container">
+                                    <input type="number" id="temperatureInput" class="numeric-input" min="20" max="40" value="25">
+                                    <span class="unit">°C</span>
                                 </div>
                             </div>
                         </div>
@@ -233,6 +244,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
