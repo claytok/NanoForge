@@ -1066,336 +1066,187 @@ function addZoomControls() {
 }
 
 function createNanoparticle() {
-    // Clear previous model if exists
-    if (nanoparticle) {
-        scene.remove(nanoparticle);
-    }
-    
-    // Create a new group for the nanoparticle
-    nanoparticle = new THREE.Group();
-    
-    // Create core
-    const coreGeometry = createGeometryByShape(
-        currentDesign.core.shape, 
-        currentDesign.core.size
-    );
-    
-    const coreMaterial = new THREE.MeshPhongMaterial({
-        color: materialProperties.core[currentDesign.core.material].color,
-        shininess: 60,
-        transparent: true,
-        opacity: 0.9
-    });
-    
-    const core = new THREE.Mesh(coreGeometry, coreMaterial);
-    nanoparticle.add(core);
-    
-    // Add layers
-    let currentDiameter = currentDesign.core.size;
-    
-    currentDesign.layers.forEach((layer, index) => {
-        const layerThickness = layer.thickness;
-        const newDiameter = currentDiameter + (layerThickness * 2);
-        const coverage = layer.coverage / 100; // Convert percentage to decimal
-        
-        if (coverage >= 0.95) {
-            // If coverage is near complete, show as a full layer
-            const layerGeometry = createGeometryByShape(
-                currentDesign.core.shape,
-                newDiameter
-            );
-            
-            const layerColor = getLayerPropertyByType(layer.type, layer.material, 'color');
-            
-            const layerMaterial = new THREE.MeshPhongMaterial({
-                color: layerColor,
-                transparent: true,
-                opacity: 0.7,
-                shininess: 30,
-                wireframe: false
-            });
-            
-            const layerMesh = new THREE.Mesh(layerGeometry, layerMaterial);
-            nanoparticle.add(layerMesh);
-        } else {
-            // For partial coverage, use the specified coverage style
-            const coverageStyle = layer.coverageStyle || 'capped'; // Default to capped if not specified
-            
-            createPartialCoverage(
-                currentDesign.core.shape,
-                currentDiameter,
-                newDiameter,
-                getLayerPropertyByType(layer.type, layer.material, 'color'),
-                layer.coverage,
-                coverageStyle
-            );
+    try {
+        // Clear previous model if exists
+        if (nanoparticle) {
+            scene.remove(nanoparticle);
         }
         
-        currentDiameter = newDiameter;
+        // Create a new group for the nanoparticle
+        nanoparticle = new THREE.Group();
+        
+        // Create core
+        const coreGeometry = createGeometryByShape(
+            currentDesign.core.shape, 
+            currentDesign.core.size
+        );
+        
+        const coreMaterial = new THREE.MeshPhongMaterial({
+            color: materialProperties.core[currentDesign.core.material].color,
+            shininess: 60,
+            transparent: true,
+            opacity: 0.9
+        });
+        
+        const core = new THREE.Mesh(coreGeometry, coreMaterial);
+        nanoparticle.add(core);
+        
+        // Add layers
+        let currentDiameter = currentDesign.core.size;
+        
+        if (currentDesign.layers && currentDesign.layers.length > 0) {
+            currentDesign.layers.forEach((layer, index) => {
+                try {
+                    const layerThickness = layer.thickness;
+                    const newDiameter = currentDiameter + (layerThickness * 2);
+                    const coverage = layer.coverage / 100; // Convert percentage to decimal
+                    
+                    if (coverage >= 0.95) {
+                        // If coverage is near complete, show as a full layer
+                        const layerGeometry = createGeometryByShape(
+                            currentDesign.core.shape,
+                            newDiameter
+                        );
+                        
+                        const layerColor = getLayerPropertyByType(layer.type, layer.material, 'color');
+                        
+                        const layerMaterial = new THREE.MeshPhongMaterial({
+                            color: layerColor,
+                            transparent: true,
+                            opacity: 0.7,
+                            shininess: 30,
+                            wireframe: false
+                        });
+                        
+                        const layerMesh = new THREE.Mesh(layerGeometry, layerMaterial);
+                        nanoparticle.add(layerMesh);
+                    } else {
+                        // Safer approach for partial coverage visualization
+                        createSafePartialCoverage(
+                            currentDesign.core.shape,
+                            currentDiameter,
+                            newDiameter,
+                            getLayerPropertyByType(layer.type, layer.material, 'color'),
+                            layer.coverage,
+                            layer.coverageStyle || 'capped' // Default to capped if not specified
+                        );
+                    }
+                    
+                    currentDiameter = newDiameter;
+                } catch (layerError) {
+                    console.error("Error adding layer:", layerError);
+                    // Continue with the next layer even if this one fails
+                }
+            });
+        }
+        
+        // Add nanoparticle to scene
+        scene.add(nanoparticle);
+        
+        // Center the camera view on the nanoparticle
+        autoScaleView();
+    } catch (error) {
+        console.error("Error creating nanoparticle:", error);
+        // Create a simple sphere as fallback to ensure something is visible
+        createFallbackParticle();
+    }
+}
+
+// Simplified safe version of partial coverage that won't break the model
+function createSafePartialCoverage(shape, innerDiameter, outerDiameter, color, coverage, coverageStyle) {
+    try {
+        const innerRadius = innerDiameter / 2;
+        const outerRadius = outerDiameter / 2;
+        const thickness = outerRadius - innerRadius;
+        
+        // Simple material
+        const layerMaterial = new THREE.MeshPhongMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.7,
+            shininess: 30,
+            side: THREE.DoubleSide
+        });
+        
+        if (coverageStyle === 'sparse' || !coverageStyle) {
+            // Simplified sparse coverage with fewer particles
+            const numberOfPatches = Math.max(5, Math.min(30, Math.floor(coverage / 3)));
+            const patchSize = thickness * 1.5;
+            
+            for (let i = 0; i < numberOfPatches; i++) {
+                // Use simple math to distribute points on sphere
+                const phi = Math.acos(-1 + (2 * i) / numberOfPatches);
+                const theta = Math.sqrt(numberOfPatches * Math.PI) * phi;
+                
+                // Convert to cartesian coordinates
+                const x = Math.sin(phi) * Math.cos(theta) * outerRadius;
+                const y = Math.sin(phi) * Math.sin(theta) * outerRadius;
+                const z = Math.cos(phi) * outerRadius;
+                
+                // Create a patch
+                const patch = new THREE.Mesh(
+                    new THREE.SphereGeometry(patchSize, 8, 8),
+                    layerMaterial
+                );
+                patch.position.set(x, y, z);
+                nanoparticle.add(patch);
+            }
+        } else {
+            // Simplified capped coverage
+            const coverageRadians = Math.PI * (coverage / 100);
+            
+            // Just use a simple partial sphere
+            const capGeometry = new THREE.SphereGeometry(
+                outerRadius, 
+                32, 32, 
+                0, Math.PI * 2, 
+                0, coverageRadians
+            );
+            
+            const cap = new THREE.Mesh(capGeometry, layerMaterial);
+            nanoparticle.add(cap);
+            
+            // If coverage is high, add a cap at the bottom too
+            if (coverage > 50) {
+                const bottomCap = new THREE.Mesh(capGeometry.clone(), layerMaterial.clone());
+                bottomCap.rotation.x = Math.PI;
+                nanoparticle.add(bottomCap);
+            }
+        }
+    } catch (error) {
+        console.error("Error in createSafePartialCoverage:", error);
+        // If this fails, just add a simple shell around the particle
+        try {
+            const shellGeometry = createGeometryByShape(shape, outerDiameter);
+            const simpleMaterial = new THREE.MeshPhongMaterial({
+                color: color,
+                transparent: true,
+                opacity: 0.4,
+                wireframe: true
+            });
+            const shell = new THREE.Mesh(shellGeometry, simpleMaterial);
+            nanoparticle.add(shell);
+        } catch (fallbackError) {
+            console.error("Even fallback failed:", fallbackError);
+        }
+    }
+}
+
+// Fallback function to ensure something is visible
+function createFallbackParticle() {
+    const fallbackGeometry = new THREE.SphereGeometry(50, 16, 16);
+    const fallbackMaterial = new THREE.MeshBasicMaterial({
+        color: 0xFF0000,
+        wireframe: true
     });
     
-    // Add nanoparticle to scene
+    const fallbackMesh = new THREE.Mesh(fallbackGeometry, fallbackMaterial);
+    
+    nanoparticle = new THREE.Group();
+    nanoparticle.add(fallbackMesh);
     scene.add(nanoparticle);
     
-    // Center the camera view on the nanoparticle
-    autoScaleView();
-}
-
-function createPartialCoverage(shape, innerDiameter, outerDiameter, color, coverage, coverageStyle) {
-    // Different strategies based on shape and coverage style
-    if (shape === 'sphere') {
-        if (coverageStyle === 'capped') {
-            createPartialSphereCoverage(innerDiameter, outerDiameter, color, coverage);
-        } else { // sparse
-            createSparseSphereCoverage(innerDiameter, outerDiameter, color, coverage);
-        }
-    } else {
-        // For non-spherical shapes, use appropriate method based on coverage style
-        if (coverageStyle === 'capped') {
-            createPatchBasedCoverage(shape, innerDiameter, outerDiameter, color, coverage);
-        } else { // sparse
-            createSparseCoverage(shape, innerDiameter, outerDiameter, color, coverage);
-        }
-    }
-}
-
-function createPartialSphereCoverage(innerDiameter, outerDiameter, color, coverage) {
-    // For spheres, we'll use a latitude-based cutoff to represent coverage percentage
-    const innerRadius = innerDiameter / 2;
-    const outerRadius = outerDiameter / 2;
-    
-    // Calculate the cutoff angle based on coverage
-    // coverage = (1 - cos(theta)) / 2, solve for theta
-    const cutoffAngle = Math.acos(1 - 2 * coverage);
-    
-    // Create materials with same appearance as sparse mode
-    const layerMaterial = new THREE.MeshPhongMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.7,
-        shininess: 30,
-        side: THREE.DoubleSide
-    });
-    
-    // Calculate the thickness of the layer
-    const thickness = outerRadius - innerRadius;
-    
-    // Create a more visible cap by using a thicker shell approach
-    const capGeometry = new THREE.SphereGeometry(
-        outerRadius, 
-        32, 32, 
-        0, Math.PI * 2, 
-        0, cutoffAngle
-    );
-    
-    // Create the cap with the same material as sparse patches
-    const cap = new THREE.Mesh(capGeometry, layerMaterial);
-    nanoparticle.add(cap);
-    
-    // Add small sphere patches around the edge to make it more obvious
-    const edgePoints = 12; // Number of points around the edge
-    for (let i = 0; i < edgePoints; i++) {
-        const angle = (i / edgePoints) * Math.PI * 2;
-        const x = Math.sin(angle) * outerRadius * Math.sin(cutoffAngle);
-        const z = Math.cos(angle) * outerRadius * Math.sin(cutoffAngle);
-        const y = outerRadius * Math.cos(cutoffAngle);
-        
-        // Create a small sphere at each point on the edge
-        const patchGeometry = new THREE.SphereGeometry(thickness * 0.8, 8, 8);
-        const patch = new THREE.Mesh(patchGeometry, layerMaterial);
-        patch.position.set(x, y, z);
-        nanoparticle.add(patch);
-    }
-    
-    // Create a brighter color for the edge highlight
-    const highlightColor = new THREE.Color(color);
-    // Brighten by increasing RGB components
-    highlightColor.r = Math.min(1, highlightColor.r * 1.4);
-    highlightColor.g = Math.min(1, highlightColor.g * 1.4);
-    highlightColor.b = Math.min(1, highlightColor.b * 1.4);
-    
-    // Add a more visible ring at the edge of the cap
-    const edgeGeometry = new THREE.TorusGeometry(
-        outerRadius * Math.sin(cutoffAngle), // radius
-        thickness * 0.4, // tube radius - proportional to layer thickness
-        12, // radial segments
-        24 // tubular segments
-    );
-    
-    const edgeMaterial = new THREE.MeshPhongMaterial({
-        color: highlightColor,
-        transparent: true,
-        opacity: 0.8,
-        shininess: 40
-    });
-    
-    const edge = new THREE.Mesh(edgeGeometry, edgeMaterial);
-    edge.rotation.x = Math.PI / 2;
-    edge.position.y = outerRadius * Math.cos(cutoffAngle);
-    nanoparticle.add(edge);
-    
-    // Add a second cap at the bottom if coverage is more than 50%
-    if (coverage > 0.5) {
-        const bottomCap = new THREE.Mesh(capGeometry.clone(), layerMaterial.clone());
-        bottomCap.rotation.x = Math.PI;
-        nanoparticle.add(bottomCap);
-        
-        // Add patches around the bottom edge as well
-        for (let i = 0; i < edgePoints; i++) {
-            const angle = (i / edgePoints) * Math.PI * 2;
-            const x = Math.sin(angle) * outerRadius * Math.sin(cutoffAngle);
-            const z = Math.cos(angle) * outerRadius * Math.sin(cutoffAngle);
-            const y = -outerRadius * Math.cos(cutoffAngle);
-            
-            const patchGeometry = new THREE.SphereGeometry(thickness * 0.8, 8, 8);
-            const patch = new THREE.Mesh(patchGeometry, layerMaterial);
-            patch.position.set(x, y, z);
-            nanoparticle.add(patch);
-        }
-        
-        // Bottom edge ring
-        const bottomEdge = new THREE.Mesh(edgeGeometry.clone(), edgeMaterial.clone());
-        bottomEdge.rotation.x = Math.PI / 2;
-        bottomEdge.position.y = -outerRadius * Math.cos(cutoffAngle);
-        nanoparticle.add(bottomEdge);
-    }
-}
-
-function createPatchBasedCoverage(shape, innerDiameter, outerDiameter, color, coverage) {
-    // For non-spherical shapes, create patches of material on the surface
-    const layerMaterial = new THREE.MeshPhongMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.7,
-        shininess: 30
-    });
-    
-    // Number of patches based on coverage
-    const maxPatches = 50;
-    const numPatches = Math.floor(maxPatches * coverage);
-    
-    // Get the outer geometry shape for reference points
-    const referenceGeometry = createGeometryByShape(shape, outerDiameter);
-    const positions = referenceGeometry.attributes.position.array;
-    
-    // Place patches randomly on surface
-    for (let i = 0; i < numPatches; i++) {
-        // Get a random vertex from the reference geometry
-        const vertexIndex = Math.floor(Math.random() * (positions.length / 3)) * 3;
-        const x = positions[vertexIndex];
-        const y = positions[vertexIndex + 1];
-        const z = positions[vertexIndex + 2];
-        
-        // Create a small sphere as a patch
-        const patchSize = (outerDiameter - innerDiameter) * 0.8;
-        const patchGeometry = new THREE.SphereGeometry(patchSize, 8, 8);
-        const patch = new THREE.Mesh(patchGeometry, layerMaterial);
-        
-        // Position the patch
-        patch.position.set(x, y, z);
-        
-        // Add to nanoparticle
-        nanoparticle.add(patch);
-    }
-}
-
-function createSparseSphereCoverage(innerDiameter, outerDiameter, color, coverage) {
-    const innerRadius = innerDiameter / 2;
-    const outerRadius = outerDiameter / 2;
-    const thickness = outerRadius - innerRadius;
-    
-    // Create material for the patches
-    const layerMaterial = new THREE.MeshPhongMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.7,
-        shininess: 30
-    });
-    
-    // Number of patches based on coverage and size
-    const surfaceArea = 4 * Math.PI * outerRadius * outerRadius;
-    const patchSize = thickness * 1.5; // Patch size proportional to layer thickness
-    const patchArea = Math.PI * patchSize * patchSize;
-    
-    // Calculate how many patches to place based on coverage percentage
-    const targetArea = surfaceArea * (coverage / 100);
-    const numberOfPatches = Math.max(10, Math.floor(targetArea / patchArea));
-    
-    // Create patches randomly distributed on the sphere surface
-    for (let i = 0; i < numberOfPatches; i++) {
-        // Use fibonacci sphere algorithm for even distribution
-        const y = 1 - (i / (numberOfPatches - 1)) * 2; // y goes from 1 to -1
-        const radius = Math.sqrt(1 - y * y);           // radius at y
-        const theta = ((Math.sqrt(5) + 1) / 2 - 1) * i * 2 * Math.PI; // golden angle increment
-        
-        // Get point on sphere
-        const x = Math.cos(theta) * radius;
-        const z = Math.sin(theta) * radius;
-        
-        // Create a small sphere as patch
-        const patch = new THREE.Mesh(
-            new THREE.SphereGeometry(patchSize, 8, 8),
-            layerMaterial
-        );
-        
-        // Position on surface of sphere
-        patch.position.set(
-            x * outerRadius,
-            y * outerRadius,
-            z * outerRadius
-        );
-        
-        nanoparticle.add(patch);
-    }
-}
-
-function createSparseCoverage(shape, innerDiameter, outerDiameter, color, coverage) {
-    const layerMaterial = new THREE.MeshPhongMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.7,
-        shininess: 30
-    });
-    
-    // Get the outer geometry shape for reference points
-    const referenceGeometry = createGeometryByShape(shape, outerDiameter);
-    const positions = referenceGeometry.attributes.position.array;
-    
-    // Number of vertices in the geometry
-    const vertexCount = positions.length / 3;
-    
-    // Number of patches based on coverage
-    const numberOfPatches = Math.max(10, Math.floor(vertexCount * (coverage / 100)));
-    
-    // Size of patches proportional to layer thickness
-    const thickness = (outerDiameter - innerDiameter) / 2;
-    const patchSize = thickness * 1.5;
-    
-    // Create an array of unique random vertex indices
-    const vertexIndices = new Set();
-    while (vertexIndices.size < numberOfPatches && vertexIndices.size < vertexCount) {
-        vertexIndices.add(Math.floor(Math.random() * vertexCount));
-    }
-    
-    // Place patches at selected vertices
-    for (const vertexIndex of vertexIndices) {
-        const idx = vertexIndex * 3;
-        const x = positions[idx];
-        const y = positions[idx + 1];
-        const z = positions[idx + 2];
-        
-        // Create a small sphere as a patch
-        const patch = new THREE.Mesh(
-            new THREE.SphereGeometry(patchSize, 8, 8),
-            layerMaterial
-        );
-        
-        // Position the patch
-        patch.position.set(x, y, z);
-        
-        // Add to nanoparticle
-        nanoparticle.add(patch);
-    }
+    console.log("Created fallback particle due to error");
 }
 
 function createGeometryByShape(shape, size) {
@@ -2003,4 +1854,14 @@ function onWindowResize() {
     camera.updateProjectionMatrix();
     
     renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+}
+
+// Add back createPartialCoverage for backward compatibility
+function createPartialCoverage(shape, innerDiameter, outerDiameter, color, coverage, coverageStyle) {
+    try {
+        // Use the safe version instead
+        createSafePartialCoverage(shape, innerDiameter, outerDiameter, color, coverage, coverageStyle);
+    } catch (error) {
+        console.error("Error in createPartialCoverage:", error);
+    }
 }
