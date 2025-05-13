@@ -243,7 +243,7 @@ const materialProperties = {
 const compatibilityRules = {
     size: {
         min: 5,
-        max: 200,
+        max: 1000,
         rule: (design) => {
             // Larger particles with many hydrophobic layers can aggregate
             if (design.core.size > 100) {
@@ -534,13 +534,28 @@ function setupEventListeners() {
     // Core controls
     document.getElementById('coreMaterial').addEventListener('change', updateCoreProperties);
     document.getElementById('coreSize').addEventListener('input', updateSizeDisplay);
-    document.getElementById('coreSize').addEventListener('change', updateCoreProperties);
+    document.getElementById('coreSize').addEventListener('change', function() {
+        const value = this.value;
+        if (value >= 5 && value <= 1000) {
+            document.getElementById('coreSize').value = value;
+            updateSizeDisplay();
+            updateCoreProperties();
+        }
+    });
     document.getElementById('coreShape').addEventListener('change', updateCoreProperties);
     
     // Input box for size
     document.getElementById('coreSizeInput').addEventListener('input', function() {
         const value = this.value;
-        if (value >= 5 && value <= 200) {
+        if (value >= 5 && value <= 1000) {
+            document.getElementById('coreSize').value = value;
+            updateSizeDisplay();
+        }
+    });
+    
+    document.getElementById('coreSizeInput').addEventListener('change', function() {
+        const value = this.value;
+        if (value >= 5 && value <= 1000) {
             document.getElementById('coreSize').value = value;
             updateSizeDisplay();
             updateCoreProperties();
@@ -550,12 +565,34 @@ function setupEventListeners() {
     // Environment controls
     document.getElementById('medium').addEventListener('change', updateEnvironmentProperties);
     document.getElementById('ph').addEventListener('input', updatePhDisplay);
-    document.getElementById('ph').addEventListener('change', updateEnvironmentProperties);
+    document.getElementById('ph').addEventListener('change', function() {
+        const value = this.value;
+        if (value >= 3 && value <= 10) {
+            document.getElementById('ph').value = value;
+            updatePhDisplay();
+            updateEnvironmentProperties();
+        }
+    });
     document.getElementById('temperature').addEventListener('input', updateTemperatureDisplay);
-    document.getElementById('temperature').addEventListener('change', updateEnvironmentProperties);
+    document.getElementById('temperature').addEventListener('change', function() {
+        const value = this.value;
+        if (value >= 0 && value <= 100) {
+            document.getElementById('temperature').value = value;
+            updateTemperatureDisplay();
+            updateEnvironmentProperties();
+        }
+    });
     
     // Input box for pH
     document.getElementById('phInput').addEventListener('input', function() {
+        const value = this.value;
+        if (value >= 3 && value <= 10) {
+            document.getElementById('ph').value = value;
+            updatePhDisplay();
+        }
+    });
+    
+    document.getElementById('phInput').addEventListener('change', function() {
         const value = this.value;
         if (value >= 3 && value <= 10) {
             document.getElementById('ph').value = value;
@@ -567,7 +604,15 @@ function setupEventListeners() {
     // Input box for temperature
     document.getElementById('temperatureInput').addEventListener('input', function() {
         const value = this.value;
-        if (value >= 20 && value <= 40) {
+        if (value >= 0 && value <= 100) {
+            document.getElementById('temperature').value = value;
+            updateTemperatureDisplay();
+        }
+    });
+    
+    document.getElementById('temperatureInput').addEventListener('change', function() {
+        const value = this.value;
+        if (value >= 0 && value <= 100) {
             document.getElementById('temperature').value = value;
             updateTemperatureDisplay();
             updateEnvironmentProperties();
@@ -673,7 +718,7 @@ function updateTemperatureDisplay() {
 
 function updateCoreProperties() {
     currentDesign.core.material = document.getElementById('coreMaterial').value;
-    currentDesign.core.size = parseInt(document.getElementById('coreSize').value);
+    currentDesign.core.size = parseInt(document.getElementById('coreSize').value) || 50; // Default to 50 if parsing fails
     currentDesign.core.shape = document.getElementById('coreShape').value;
     
     updateNanoparticleModel();
@@ -683,8 +728,8 @@ function updateCoreProperties() {
 
 function updateEnvironmentProperties() {
     currentDesign.environment.medium = document.getElementById('medium').value;
-    currentDesign.environment.ph = parseFloat(document.getElementById('ph').value);
-    currentDesign.environment.temperature = parseInt(document.getElementById('temperature').value);
+    currentDesign.environment.ph = parseFloat(document.getElementById('ph').value) || 7.4; // Default to 7.4 if parsing fails
+    currentDesign.environment.temperature = parseInt(document.getElementById('temperature').value) || 25; // Default to 25 if parsing fails
     
     updatePhysicalProperties();
     updateCompatibilityIndicator();
@@ -1180,9 +1225,10 @@ function autoScaleView() {
     const center = boundingBox.getCenter(new THREE.Vector3());
     const size = boundingBox.getSize(new THREE.Vector3());
     
-    // Set camera position based on size
+    // Set camera position based on size (with improved scaling for larger particles)
     const maxDim = Math.max(size.x, size.y, size.z);
-    camera.position.z = maxDim * 4;
+    const scaleFactor = currentDesign.core.size > 500 ? 5 : 4; // Increase distance for very large particles
+    camera.position.z = maxDim * scaleFactor;
     
     // Update controls
     if (controls) {
