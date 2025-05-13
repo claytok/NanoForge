@@ -758,6 +758,32 @@ function openAddLayerModal() {
     const modal = document.getElementById('addLayerModal');
     modal.classList.add('open');
     
+    // Add coverage style radio buttons if they don't exist yet
+    const coverageStyleContainer = modal.querySelector('.coverage-style-container');
+    
+    if (!coverageStyleContainer) {
+        // Create container for coverage style options
+        const styleContainer = document.createElement('div');
+        styleContainer.className = 'coverage-style-container';
+        styleContainer.innerHTML = `
+            <label>Coverage Style:</label>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="coverageStyle" value="capped" checked>
+                    Capped (localized coverage)
+                </label>
+                <label>
+                    <input type="radio" name="coverageStyle" value="sparse">
+                    Sparse (distributed coverage)
+                </label>
+            </div>
+        `;
+        
+        // Find where to insert the coverage style options
+        const sliderContainer = modal.querySelector('.slider-container');
+        sliderContainer.appendChild(styleContainer);
+    }
+    
     // Initialize layer material dropdown based on first option
     updateLayerMaterialOptions();
 }
@@ -800,6 +826,9 @@ function addNewLayer() {
     const coverageInput = document.getElementById('layerCoverageInput');
     const coverage = parseInt(coverageInput.value) || parseInt(coverageSlider.value) || 90;
     
+    // Get coverage style - add radio button selection
+    const coverageStyle = document.querySelector('input[name="coverageStyle"]:checked').value;
+    
     // Get material name for display
     const materialName = materialProperties.layer[type].options[material].name;
     
@@ -808,7 +837,8 @@ function addNewLayer() {
         material,
         materialName,
         thickness,
-        coverage
+        coverage,
+        coverageStyle
     };
     
     // Add to design
@@ -1088,13 +1118,16 @@ function createNanoparticle() {
             const layerMesh = new THREE.Mesh(layerGeometry, layerMaterial);
             nanoparticle.add(layerMesh);
         } else {
-            // For partial coverage, create partial geometries
+            // For partial coverage, use the specified coverage style
+            const coverageStyle = layer.coverageStyle || 'capped'; // Default to capped if not specified
+            
             createPartialCoverage(
                 currentDesign.core.shape,
                 currentDiameter,
                 newDiameter,
                 getLayerPropertyByType(layer.type, layer.material, 'color'),
-                coverage
+                layer.coverage,
+                coverageStyle
             );
         }
         
@@ -1108,13 +1141,21 @@ function createNanoparticle() {
     autoScaleView();
 }
 
-function createPartialCoverage(shape, innerDiameter, outerDiameter, color, coverage) {
-    // Different strategies based on shape
+function createPartialCoverage(shape, innerDiameter, outerDiameter, color, coverage, coverageStyle) {
+    // Different strategies based on shape and coverage style
     if (shape === 'sphere') {
-        createPartialSphereCoverage(innerDiameter, outerDiameter, color, coverage);
+        if (coverageStyle === 'capped') {
+            createPartialSphereCoverage(innerDiameter, outerDiameter, color, coverage);
+        } else { // sparse
+            createSparseSphereCoverage(innerDiameter, outerDiameter, color, coverage);
+        }
     } else {
-        // For non-spherical shapes, use patch-based approach
-        createPatchBasedCoverage(shape, innerDiameter, outerDiameter, color, coverage);
+        // For non-spherical shapes, use appropriate method based on coverage style
+        if (coverageStyle === 'capped') {
+            createPatchBasedCoverage(shape, innerDiameter, outerDiameter, color, coverage);
+        } else { // sparse
+            createSparseCoverage(shape, innerDiameter, outerDiameter, color, coverage);
+        }
     }
 }
 
@@ -1205,6 +1246,105 @@ function createPatchBasedCoverage(shape, innerDiameter, outerDiameter, color, co
         const patchSize = (outerDiameter - innerDiameter) * 0.8;
         const patchGeometry = new THREE.SphereGeometry(patchSize, 8, 8);
         const patch = new THREE.Mesh(patchGeometry, layerMaterial);
+        
+        // Position the patch
+        patch.position.set(x, y, z);
+        
+        // Add to nanoparticle
+        nanoparticle.add(patch);
+    }
+}
+
+function createSparseSphereCoverage(innerDiameter, outerDiameter, color, coverage) {
+    const innerRadius = innerDiameter / 2;
+    const outerRadius = outerDiameter / 2;
+    const thickness = outerRadius - innerRadius;
+    
+    // Create material for the patches
+    const layerMaterial = new THREE.MeshPhongMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.7,
+        shininess: 30
+    });
+    
+    // Number of patches based on coverage and size
+    const surfaceArea = 4 * Math.PI * outerRadius * outerRadius;
+    const patchSize = thickness * 1.5; // Patch size proportional to layer thickness
+    const patchArea = Math.PI * patchSize * patchSize;
+    
+    // Calculate how many patches to place based on coverage percentage
+    const targetArea = surfaceArea * (coverage / 100);
+    const numberOfPatches = Math.max(10, Math.floor(targetArea / patchArea));
+    
+    // Create patches randomly distributed on the sphere surface
+    for (let i = 0; i < numberOfPatches; i++) {
+        // Use fibonacci sphere algorithm for even distribution
+        const y = 1 - (i / (numberOfPatches - 1)) * 2; // y goes from 1 to -1
+        const radius = Math.sqrt(1 - y * y);           // radius at y
+        const theta = ((Math.sqrt(5) + 1) / 2 - 1) * i * 2 * Math.PI; // golden angle increment
+        
+        // Get point on sphere
+        const x = Math.cos(theta) * radius;
+        const z = Math.sin(theta) * radius;
+        
+        // Create a small sphere as patch
+        const patch = new THREE.Mesh(
+            new THREE.SphereGeometry(patchSize, 8, 8),
+            layerMaterial
+        );
+        
+        // Position on surface of sphere
+        patch.position.set(
+            x * outerRadius,
+            y * outerRadius,
+            z * outerRadius
+        );
+        
+        nanoparticle.add(patch);
+    }
+}
+
+function createSparseCoverage(shape, innerDiameter, outerDiameter, color, coverage) {
+    const layerMaterial = new THREE.MeshPhongMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.7,
+        shininess: 30
+    });
+    
+    // Get the outer geometry shape for reference points
+    const referenceGeometry = createGeometryByShape(shape, outerDiameter);
+    const positions = referenceGeometry.attributes.position.array;
+    
+    // Number of vertices in the geometry
+    const vertexCount = positions.length / 3;
+    
+    // Number of patches based on coverage
+    const numberOfPatches = Math.max(10, Math.floor(vertexCount * (coverage / 100)));
+    
+    // Size of patches proportional to layer thickness
+    const thickness = (outerDiameter - innerDiameter) / 2;
+    const patchSize = thickness * 1.5;
+    
+    // Create an array of unique random vertex indices
+    const vertexIndices = new Set();
+    while (vertexIndices.size < numberOfPatches && vertexIndices.size < vertexCount) {
+        vertexIndices.add(Math.floor(Math.random() * vertexCount));
+    }
+    
+    // Place patches at selected vertices
+    for (const vertexIndex of vertexIndices) {
+        const idx = vertexIndex * 3;
+        const x = positions[idx];
+        const y = positions[idx + 1];
+        const z = positions[idx + 2];
+        
+        // Create a small sphere as a patch
+        const patch = new THREE.Mesh(
+            new THREE.SphereGeometry(patchSize, 8, 8),
+            layerMaterial
+        );
         
         // Position the patch
         patch.position.set(x, y, z);
