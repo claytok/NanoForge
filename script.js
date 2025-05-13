@@ -691,10 +691,29 @@ function setupEventListeners() {
     // Layer thickness and coverage sliders in modal
     document.getElementById('layerThickness').addEventListener('input', function() {
         document.getElementById('layerThicknessValue').textContent = `${this.value} nm`;
+        document.getElementById('layerThicknessInput').value = this.value;
     });
     
     document.getElementById('layerCoverage').addEventListener('input', function() {
         document.getElementById('layerCoverageValue').textContent = `${this.value}%`;
+        document.getElementById('layerCoverageInput').value = this.value;
+    });
+    
+    // Layer thickness and coverage input fields in modal
+    document.getElementById('layerThicknessInput').addEventListener('input', function() {
+        const value = parseFloat(this.value);
+        if (value >= 0.5 && value <= 20) {
+            document.getElementById('layerThickness').value = value;
+            document.getElementById('layerThicknessValue').textContent = `${value} nm`;
+        }
+    });
+    
+    document.getElementById('layerCoverageInput').addEventListener('input', function() {
+        const value = parseInt(this.value);
+        if (value >= 10 && value <= 100) {
+            document.getElementById('layerCoverage').value = value;
+            document.getElementById('layerCoverageValue').textContent = `${value}%`;
+        }
     });
 }
 
@@ -771,8 +790,15 @@ function updateLayerMaterialOptions() {
 function addNewLayer() {
     const type = document.getElementById('layerType').value;
     const material = document.getElementById('layerMaterial').value;
-    const thickness = parseFloat(document.getElementById('layerThickness').value);
-    const coverage = parseInt(document.getElementById('layerCoverage').value);
+    
+    // Get values from sliders or input fields, whichever was changed last
+    const thicknessSlider = document.getElementById('layerThickness');
+    const thicknessInput = document.getElementById('layerThicknessInput');
+    const thickness = parseFloat(thicknessInput.value) || parseFloat(thicknessSlider.value) || 2;
+    
+    const coverageSlider = document.getElementById('layerCoverage');
+    const coverageInput = document.getElementById('layerCoverageInput');
+    const coverage = parseInt(coverageInput.value) || parseInt(coverageSlider.value) || 90;
     
     // Get material name for display
     const materialName = materialProperties.layer[type].options[material].name;
@@ -1225,9 +1251,27 @@ function autoScaleView() {
     const center = boundingBox.getCenter(new THREE.Vector3());
     const size = boundingBox.getSize(new THREE.Vector3());
     
-    // Set camera position based on size (with improved scaling for larger particles)
+    // Set camera position based on size and material (with better scaling for different materials)
     const maxDim = Math.max(size.x, size.y, size.z);
-    const scaleFactor = currentDesign.core.size > 500 ? 5 : 4; // Increase distance for very large particles
+    
+    // Dynamic scale factor based on particle size and material
+    let scaleFactor = 4; // default scaling
+    
+    // For very large particles, increase distance
+    if (currentDesign.core.size > 500) {
+        scaleFactor = 6;
+    } else if (currentDesign.core.size > 200) {
+        scaleFactor = 5;
+    }
+    
+    // Material-specific adjustments (for materials that appear differently sized)
+    if (currentDesign.core.material === 'silver') {
+        scaleFactor *= 1.5; // Silver particles need more distance
+    } else if (currentDesign.core.material === 'quantum-dot') {
+        scaleFactor *= 1.2; // Quantum dots need a bit more distance
+    }
+    
+    // Apply the scale factor to position the camera
     camera.position.z = maxDim * scaleFactor;
     
     // Update controls
