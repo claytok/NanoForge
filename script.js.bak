@@ -1254,20 +1254,20 @@ function autoScaleView() {
     // Set camera position based on size
     const maxDim = Math.max(size.x, size.y, size.z);
     
-    // Use much larger scale factors for all sizes to ensure particles fit on screen
+    // Base scaling - significantly increased for larger particles
     let scaleFactor;
     
     // Determine scale factor based on particle size
     if (currentDesign.core.size > 900) {
-        scaleFactor = 18; // Very large particles
+        scaleFactor = 12; // Very large particles
     } else if (currentDesign.core.size > 700) {
-        scaleFactor = 15; // Large particles
+        scaleFactor = 10; // Large particles
     } else if (currentDesign.core.size > 500) {
-        scaleFactor = 12; // Medium-large particles
+        scaleFactor = 8;  // Medium-large particles
     } else if (currentDesign.core.size > 200) {
-        scaleFactor = 10; // Medium particles
+        scaleFactor = 6;  // Medium particles
     } else {
-        scaleFactor = 8;  // Default for smaller particles
+        scaleFactor = 4;  // Default for smaller particles
     }
     
     // Apply the scale factor to position the camera
@@ -1275,7 +1275,7 @@ function autoScaleView() {
     
     // For very large particles, increase the camera's far clipping plane
     if (currentDesign.core.size > 500) {
-        camera.far = 20000;
+        camera.far = 10000;
         camera.updateProjectionMatrix();
     }
     
@@ -1581,247 +1581,4 @@ function exportData() {
                 <i class="fas fa-file-pdf"></i> PDF Report
             </button>
         </div>
-    `;
-    
-    const modalFooter = document.createElement('div');
-    modalFooter.className = 'modal-footer';
-    modalFooter.innerHTML = `
-        <button id="cancelExportBtn" class="btn btn-secondary">Cancel</button>
-    `;
-    
-    modalContent.appendChild(modalHeader);
-    modalContent.appendChild(modalBody);
-    modalContent.appendChild(modalFooter);
-    exportModal.appendChild(modalContent);
-    
-    document.body.appendChild(exportModal);
-    
-    // Add event listeners
-    const closeBtn = exportModal.querySelector('.close');
-    const cancelBtn = exportModal.querySelector('#cancelExportBtn');
-    const exportBtns = exportModal.querySelectorAll('.export-btn');
-    
-    closeBtn.addEventListener('click', closeExportModal);
-    cancelBtn.addEventListener('click', closeExportModal);
-    
-    exportBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const format = this.getAttribute('data-format');
-            
-            switch(format) {
-                case 'json':
-                    downloadJSON(exportData);
-                    break;
-                case 'csv':
-                    downloadCSV(exportData);
-                    break;
-                case 'pdf':
-                    downloadPDF(exportData);
-                    break;
-            }
-            
-            closeExportModal();
-        });
-    });
-    
-    function closeExportModal() {
-        document.body.removeChild(exportModal);
-    }
-}
-
-function downloadJSON(data) {
-    const jsonString = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    
-    // Create download link
-    const downloadLink = document.createElement('a');
-    downloadLink.href = URL.createObjectURL(blob);
-    downloadLink.download = `nanoparticle-design-${new Date().toISOString().split('T')[0]}.json`;
-    
-    // Trigger download
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-}
-
-function downloadCSV(data) {
-    // Flatten the data structure for CSV
-    const flatData = {
-        'Core Material': data.design.core.material,
-        'Core Size (nm)': data.design.core.size,
-        'Core Shape': data.design.core.shape,
-        'Environment Medium': data.design.environment.medium,
-        'Environment pH': data.design.environment.ph,
-        'Environment Temperature (°C)': data.design.environment.temperature,
-        'Zeta Potential (mV)': data.properties.zetaPotential.toFixed(1),
-        'Hydrodynamic Diameter (nm)': data.properties.hydrodynamicDiameter.toFixed(1),
-        'Aggregation Potential': data.properties.aggregationPotential.description
-    };
-    
-    // Add layer data
-    data.design.layers.forEach((layer, index) => {
-        flatData[`Layer ${index+1} Type`] = layer.type;
-        flatData[`Layer ${index+1} Material`] = layer.material;
-        flatData[`Layer ${index+1} Thickness (nm)`] = layer.thickness;
-        flatData[`Layer ${index+1} Coverage (%)`] = layer.coverage;
-    });
-    
-    // Convert to CSV
-    const header = Object.keys(flatData).join(',');
-    const values = Object.values(flatData).join(',');
-    const csvContent = `${header}\n${values}`;
-    
-    // Create download
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const downloadLink = document.createElement('a');
-    downloadLink.href = URL.createObjectURL(blob);
-    downloadLink.download = `nanoparticle-design-${new Date().toISOString().split('T')[0]}.csv`;
-    
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-}
-
-function downloadPDF(data) {
-    // Make sure we're on the 3D view tab
-    document.querySelector('.tab[data-tab="view-3d"]').click();
-    
-    // Create a loading indicator
-    const loadingOverlay = document.createElement('div');
-    loadingOverlay.className = 'loading-overlay';
-    loadingOverlay.innerHTML = `
-        <div class="spinner"></div>
-        <div class="loading-text">Generating PDF...</div>
-    `;
-    document.body.appendChild(loadingOverlay);
-    
-    // Ensure 3D view is rendered
-    renderer.render(scene, camera);
-    
-    // Get the canvas image data
-    const canvasImage = document.getElementById('nanoparticleCanvas').toDataURL('image/png');
-    
-    setTimeout(() => {
-        try {
-            // Create PDF with jsPDF
-            const pdf = new jspdf.jsPDF();
-            
-            // Add title
-            pdf.setFontSize(20);
-            pdf.setTextColor(58, 134, 255); // #3a86ff
-            pdf.text('Nanoparticle Design Report', 105, 20, {align: 'center'});
-            
-            // Add date
-            pdf.setFontSize(10);
-            pdf.setTextColor(100, 100, 100);
-            pdf.text(`Generated on ${new Date().toLocaleDateString()}`, 105, 28, {align: 'center'});
-            
-            // Add core properties section
-            pdf.setFontSize(14);
-            pdf.setTextColor(0, 0, 0);
-            pdf.text('Core Properties', 20, 40);
-            
-            pdf.setFontSize(12);
-            pdf.text(`Material: ${capitalizeFirstLetter(data.design.core.material)}`, 25, 50);
-            pdf.text(`Size: ${data.design.core.size} nm`, 25, 58);
-            pdf.text(`Shape: ${capitalizeFirstLetter(data.design.core.shape)}`, 25, 66);
-            
-            // Add environment section
-            pdf.setFontSize(14);
-            pdf.text('Environment', 20, 80);
-            
-            pdf.setFontSize(12);
-            pdf.text(`Medium: ${capitalizeFirstLetter(data.design.environment.medium)}`, 25, 90);
-            pdf.text(`pH: ${data.design.environment.ph}`, 25, 98);
-            pdf.text(`Temperature: ${data.design.environment.temperature}°C`, 25, 106);
-            
-            // Add physical properties section
-            pdf.setFontSize(14);
-            pdf.text('Physical Properties', 20, 120);
-            
-            pdf.setFontSize(12);
-            pdf.text(`Hydrodynamic Diameter: ${data.properties.hydrodynamicDiameter.toFixed(1)} nm`, 25, 130);
-            pdf.text(`Zeta Potential: ${data.properties.zetaPotential.toFixed(1)} mV`, 25, 138);
-            pdf.text(`Aggregation Potential: ${data.properties.aggregationPotential.description}`, 25, 146);
-            
-            // Add the 3D visualization
-            pdf.addImage(canvasImage, 'PNG', 120, 40, 70, 70);
-            
-            // Add surface modifications table if there are layers
-            if (data.design.layers.length > 0) {
-                pdf.setFontSize(14);
-                pdf.text('Surface Modifications', 20, 165);
-                
-                // Table headers
-                pdf.setFillColor(240, 240, 240);
-                pdf.rect(20, 170, 170, 10, 'F');
-                pdf.setFontSize(10);
-                pdf.text('Material', 25, 177);
-                pdf.text('Type', 80, 177);
-                pdf.text('Thickness (nm)', 120, 177);
-                pdf.text('Coverage (%)', 160, 177);
-                
-                // Table rows
-                let yPos = 180;
-                data.design.layers.forEach((layer, index) => {
-                    // Alternate row coloring
-                    if (index % 2 === 1) {
-                        pdf.setFillColor(248, 248, 248);
-                        pdf.rect(20, yPos, 170, 10, 'F');
-                    }
-                    
-                    pdf.text(layer.materialName, 25, yPos + 7);
-                    pdf.text(capitalizeFirstLetter(layer.type), 80, yPos + 7);
-                    pdf.text(layer.thickness.toString(), 120, yPos + 7);
-                    pdf.text(layer.coverage.toString(), 160, yPos + 7);
-                    
-                    yPos += 10;
-                    
-                    // Add a new page if we're running out of space
-                    if (yPos > 270 && index < data.design.layers.length - 1) {
-                        pdf.addPage();
-                        
-                        // Reset yPos and add header on new page
-                        yPos = 20;
-                        pdf.setFontSize(14);
-                        pdf.text('Surface Modifications (continued)', 20, yPos);
-                        
-                        // Table headers on new page
-                        pdf.setFillColor(240, 240, 240);
-                        pdf.rect(20, yPos + 5, 170, 10, 'F');
-                        pdf.setFontSize(10);
-                        pdf.text('Material', 25, yPos + 12);
-                        pdf.text('Type', 80, yPos + 12);
-                        pdf.text('Thickness (nm)', 120, yPos + 12);
-                        pdf.text('Coverage (%)', 160, yPos + 12);
-                        
-                        yPos += 15;
-                    }
-                });
-            }
-            
-            // Save the PDF
-            pdf.save(`nanoparticle-design-${new Date().toISOString().split('T')[0]}.pdf`);
-        } catch (error) {
-            console.error('Error generating PDF:', error);
-            alert('An error occurred while generating the PDF. Please try again.');
-        } finally {
-            // Remove loading overlay
-            document.body.removeChild(loadingOverlay);
-        }
-    }, 500); // Small delay to ensure rendering is complete
-}
-
-function capitalizeFirstLetter(string) {
-    if (!string) return '';
-    return string.charAt(0).toUpperCase() + string.slice(1).replace(/-/g, ' ');
-}
-
-function onWindowResize() {
-    const canvasContainer = document.getElementById('nanoparticleCanvas');
-    
-    camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
-    camera.updateProjectionMatrix();
-    
-    renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
-}
+    `
