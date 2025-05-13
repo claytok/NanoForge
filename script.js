@@ -892,12 +892,16 @@ function initThreeJS() {
     );
     
     // Add orbit controls
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.25;
-    controls.screenSpacePanning = false;
-    controls.maxDistance = 500;
-    controls.minDistance = 50;
+    try {
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.25;
+        controls.screenSpacePanning = false;
+        controls.maxDistance = 500;
+        controls.minDistance = 50;
+    } catch (error) {
+        console.error("Error initializing OrbitControls:", error);
+    }
     
     // Add zoom buttons
     addZoomControls();
@@ -1477,8 +1481,8 @@ function exportData() {
             <button class="btn btn-secondary export-btn" data-format="csv">
                 <i class="fas fa-file-csv"></i> CSV
             </button>
-            <button class="btn btn-secondary export-btn" data-format="png">
-                <i class="fas fa-file-image"></i> Image (PNG)
+            <button class="btn btn-secondary export-btn" data-format="pdf">
+                <i class="fas fa-file-pdf"></i> PDF Report
             </button>
         </div>
     `;
@@ -1515,8 +1519,8 @@ function exportData() {
                 case 'csv':
                     downloadCSV(exportData);
                     break;
-                case 'png':
-                    downloadScreenshot();
+                case 'pdf':
+                    downloadPDF(exportData);
                     break;
             }
             
@@ -1582,28 +1586,139 @@ function downloadCSV(data) {
     document.body.removeChild(downloadLink);
 }
 
-function downloadScreenshot() {
+function downloadPDF(data) {
     // Make sure we're on the 3D view tab
     document.querySelector('.tab[data-tab="view-3d"]').click();
     
-    // Temporarily pause rotation for screenshot
-    const wasRotating = nanoparticle ? true : false;
+    // Create a loading indicator
+    const loadingOverlay = document.createElement('div');
+    loadingOverlay.className = 'loading-overlay';
+    loadingOverlay.innerHTML = `
+        <div class="spinner"></div>
+        <div class="loading-text">Generating PDF...</div>
+    `;
+    document.body.appendChild(loadingOverlay);
     
-    // Render scene
+    // Ensure 3D view is rendered
     renderer.render(scene, camera);
     
-    // Get canvas data
-    const canvas = document.getElementById('nanoparticleCanvas');
-    const imageURL = canvas.toDataURL('image/png');
+    // Get the canvas image data
+    const canvasImage = document.getElementById('nanoparticleCanvas').toDataURL('image/png');
     
-    // Create download
-    const downloadLink = document.createElement('a');
-    downloadLink.href = imageURL;
-    downloadLink.download = `nanoparticle-design-${new Date().toISOString().split('T')[0]}.png`;
-    
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
+    setTimeout(() => {
+        try {
+            // Create PDF with jsPDF
+            const pdf = new jspdf.jsPDF();
+            
+            // Add title
+            pdf.setFontSize(20);
+            pdf.setTextColor(58, 134, 255); // #3a86ff
+            pdf.text('Nanoparticle Design Report', 105, 20, {align: 'center'});
+            
+            // Add date
+            pdf.setFontSize(10);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text(`Generated on ${new Date().toLocaleDateString()}`, 105, 28, {align: 'center'});
+            
+            // Add core properties section
+            pdf.setFontSize(14);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text('Core Properties', 20, 40);
+            
+            pdf.setFontSize(12);
+            pdf.text(`Material: ${capitalizeFirstLetter(data.design.core.material)}`, 25, 50);
+            pdf.text(`Size: ${data.design.core.size} nm`, 25, 58);
+            pdf.text(`Shape: ${capitalizeFirstLetter(data.design.core.shape)}`, 25, 66);
+            
+            // Add environment section
+            pdf.setFontSize(14);
+            pdf.text('Environment', 20, 80);
+            
+            pdf.setFontSize(12);
+            pdf.text(`Medium: ${capitalizeFirstLetter(data.design.environment.medium)}`, 25, 90);
+            pdf.text(`pH: ${data.design.environment.ph}`, 25, 98);
+            pdf.text(`Temperature: ${data.design.environment.temperature}°C`, 25, 106);
+            
+            // Add physical properties section
+            pdf.setFontSize(14);
+            pdf.text('Physical Properties', 20, 120);
+            
+            pdf.setFontSize(12);
+            pdf.text(`Hydrodynamic Diameter: ${data.properties.hydrodynamicDiameter.toFixed(1)} nm`, 25, 130);
+            pdf.text(`Zeta Potential: ${data.properties.zetaPotential.toFixed(1)} mV`, 25, 138);
+            pdf.text(`Aggregation Potential: ${data.properties.aggregationPotential.description}`, 25, 146);
+            
+            // Add the 3D visualization
+            pdf.addImage(canvasImage, 'PNG', 120, 40, 70, 70);
+            
+            // Add surface modifications table if there are layers
+            if (data.design.layers.length > 0) {
+                pdf.setFontSize(14);
+                pdf.text('Surface Modifications', 20, 165);
+                
+                // Table headers
+                pdf.setFillColor(240, 240, 240);
+                pdf.rect(20, 170, 170, 10, 'F');
+                pdf.setFontSize(10);
+                pdf.text('Material', 25, 177);
+                pdf.text('Type', 80, 177);
+                pdf.text('Thickness (nm)', 120, 177);
+                pdf.text('Coverage (%)', 160, 177);
+                
+                // Table rows
+                let yPos = 180;
+                data.design.layers.forEach((layer, index) => {
+                    // Alternate row coloring
+                    if (index % 2 === 1) {
+                        pdf.setFillColor(248, 248, 248);
+                        pdf.rect(20, yPos, 170, 10, 'F');
+                    }
+                    
+                    pdf.text(layer.materialName, 25, yPos + 7);
+                    pdf.text(capitalizeFirstLetter(layer.type), 80, yPos + 7);
+                    pdf.text(layer.thickness.toString(), 120, yPos + 7);
+                    pdf.text(layer.coverage.toString(), 160, yPos + 7);
+                    
+                    yPos += 10;
+                    
+                    // Add a new page if we're running out of space
+                    if (yPos > 270 && index < data.design.layers.length - 1) {
+                        pdf.addPage();
+                        
+                        // Reset yPos and add header on new page
+                        yPos = 20;
+                        pdf.setFontSize(14);
+                        pdf.text('Surface Modifications (continued)', 20, yPos);
+                        
+                        // Table headers on new page
+                        pdf.setFillColor(240, 240, 240);
+                        pdf.rect(20, yPos + 5, 170, 10, 'F');
+                        pdf.setFontSize(10);
+                        pdf.text('Material', 25, yPos + 12);
+                        pdf.text('Type', 80, yPos + 12);
+                        pdf.text('Thickness (nm)', 120, yPos + 12);
+                        pdf.text('Coverage (%)', 160, yPos + 12);
+                        
+                        yPos += 15;
+                    }
+                });
+            }
+            
+            // Save the PDF
+            pdf.save(`nanoparticle-design-${new Date().toISOString().split('T')[0]}.pdf`);
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('An error occurred while generating the PDF. Please try again.');
+        } finally {
+            // Remove loading overlay
+            document.body.removeChild(loadingOverlay);
+        }
+    }, 500); // Small delay to ensure rendering is complete
+}
+
+function capitalizeFirstLetter(string) {
+    if (!string) return '';
+    return string.charAt(0).toUpperCase() + string.slice(1).replace(/-/g, ' ');
 }
 
 function onWindowResize() {
